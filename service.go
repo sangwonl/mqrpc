@@ -1,4 +1,4 @@
-package mq
+package mqrpc
 
 import (
 	"fmt"
@@ -72,12 +72,14 @@ type MessageHandler interface {
 }
 
 type MqService struct {
+	namespace string
+	peerName  string
+
 	channel           *amqp.Channel
-	peerName          string
-	exchangeP2P       string
-	exchangeBroadcast string
 	queueP2P          *amqp.Queue
 	queueBroadcast    *amqp.Queue
+	exchangeP2P       string
+	exchangeBroadcast string
 
 	recvMsgChannel     chan Message
 	recvMsgChannelsRpc map[string]chan Message
@@ -95,10 +97,10 @@ func (mq *MqService) Run(peerName string) {
 
 	// declare queue, it will create queue only if it doesn't exist
 	mq.queueP2P = mq.enusureQueue(
-		fmt.Sprintf("oraksil.mq.q-p2p-%s", mq.peerName))
+		fmt.Sprintf("%s.mq.q-p2p-%s", mq.namespace, mq.peerName))
 
 	mq.queueBroadcast = mq.enusureQueue(
-		fmt.Sprintf("oraksil.mq.q-broadcast-%s", mq.peerName))
+		fmt.Sprintf("%s.mq.q-broadcast-%s", mq.namespace, mq.peerName))
 
 	// bind the queue with p2p exchange and broadcast one respectively
 	mq.bindQueue(mq.queueP2P, mq.exchangeP2P, mq.peerName)
@@ -261,7 +263,7 @@ func (mq *MqService) AddHandler(handler MessageHandler) {
 	}
 }
 
-func NewMqService(url, exchangeP2P, exchangeBroadcast string) *MqService {
+func NewMqService(url, ns, excForP2P, excForBroadcast string) *MqService {
 	conn, err := amqp.Dial(url)
 	if err != nil {
 		panic(err)
@@ -273,9 +275,10 @@ func NewMqService(url, exchangeP2P, exchangeBroadcast string) *MqService {
 	}
 
 	return &MqService{
+		namespace:          ns,
 		channel:            ch,
-		exchangeP2P:        exchangeP2P,
-		exchangeBroadcast:  exchangeBroadcast,
+		exchangeP2P:        excForP2P,
+		exchangeBroadcast:  excForBroadcast,
 		recvMsgChannel:     make(chan Message, 1024),
 		recvMsgChannelsRpc: make(map[string]chan Message),
 		handlerFuncs:       make(map[string]HandlerFunc),

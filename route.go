@@ -1,4 +1,4 @@
-package mq
+package mqrpc
 
 type Route struct {
 	MsgType string

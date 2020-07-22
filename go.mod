@@ -1,4 +1,4 @@
-module github.com/sangwonl/go-mq-rpc
+module github.com/sangwonl/mqrpc
 
 go 1.14
 
