@@ -1,6 +1,7 @@
 package mqrpc
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -242,7 +243,9 @@ func (mq *MqService) sendAndWaitReply(routingKey string, msgType string, payload
 	delete(mq.recvMsgChannelsRpc, msg.MessageId)
 	close(instantChannel)
 
-	return recvMsg.Payload
+	var value map[string]interface{}
+	json.Unmarshal(recvMsg.Payload, &value)
+	return value
 }
 
 func (mq *MqService) reply(exchange string, origMsg Message, payload interface{}) {
