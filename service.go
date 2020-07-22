@@ -95,12 +95,16 @@ func (mq *MqService) Run(peerName string) {
 	}
 	mq.peerName = peerName // routing key
 
+	// generate exchange name
+	mq.exchangeP2P = fmt.Sprintf("mqrpc.%s.p2p", mq.namespace)
+	mq.exchangeBroadcast = fmt.Sprintf("mqrpc.%s.broadcast", mq.namespace)
+
 	// declare queue, it will create queue only if it doesn't exist
 	mq.queueP2P = mq.enusureQueue(
-		fmt.Sprintf("%s.mq.q-p2p-%s", mq.namespace, mq.peerName))
+		fmt.Sprintf("mqrpc.%s.q-p2p-%s", mq.namespace, mq.peerName))
 
 	mq.queueBroadcast = mq.enusureQueue(
-		fmt.Sprintf("%s.mq.q-broadcast-%s", mq.namespace, mq.peerName))
+		fmt.Sprintf("mqrpc.%s.q-broadcast-%s", mq.namespace, mq.peerName))
 
 	// bind the queue with p2p exchange and broadcast one respectively
 	mq.bindQueue(mq.queueP2P, mq.exchangeP2P, mq.peerName)
@@ -263,8 +267,8 @@ func (mq *MqService) AddHandler(handler MessageHandler) {
 	}
 }
 
-func NewMqService(url, ns, excForP2P, excForBroadcast string) *MqService {
-	conn, err := amqp.Dial(url)
+func NewMqService(amqpUri, namespace string) *MqService {
+	conn, err := amqp.Dial(amqpUri)
 	if err != nil {
 		panic(err)
 	}
@@ -275,10 +279,8 @@ func NewMqService(url, ns, excForP2P, excForBroadcast string) *MqService {
 	}
 
 	return &MqService{
-		namespace:          ns,
+		namespace:          namespace,
 		channel:            ch,
-		exchangeP2P:        excForP2P,
-		exchangeBroadcast:  excForBroadcast,
 		recvMsgChannel:     make(chan Message, 1024),
 		recvMsgChannelsRpc: make(map[string]chan Message),
 		handlerFuncs:       make(map[string]HandlerFunc),
