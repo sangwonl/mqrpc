@@ -30,7 +30,7 @@ type MessageService interface {
 
 	Send(to string, msgType string, payload interface{})
 	Broadcast(msgType string, payload interface{})
-	Request(to string, msgType string, payload interface{}) Message
+	Request(to string, msgType string, payload interface{}) interface{}
 }
 
 type DefaultMessageServiceImpl struct {
@@ -53,7 +53,7 @@ func (m *DefaultMessageServiceImpl) Broadcast(msgType string, payload interface{
 	m.MqService.fireAndForget("", msgType, payload)
 }
 
-func (m *DefaultMessageServiceImpl) Request(to, msgType string, payload interface{}) Message {
+func (m *DefaultMessageServiceImpl) Request(to, msgType string, payload interface{}) interface{} {
 	return m.MqService.sendAndWaitReply(to, msgType, payload)
 }
 
@@ -224,7 +224,7 @@ func (mq *MqService) fireAndForget(routingKey string, msgType string, payload in
 	)
 }
 
-func (mq *MqService) sendAndWaitReply(routingKey string, msgType string, payload interface{}) Message {
+func (mq *MqService) sendAndWaitReply(routingKey string, msgType string, payload interface{}) interface{} {
 	msg := composeMessage("", msgType, mq.peerName, payload)
 
 	instantChannel := make(chan Message)
@@ -242,7 +242,7 @@ func (mq *MqService) sendAndWaitReply(routingKey string, msgType string, payload
 	delete(mq.recvMsgChannelsRpc, msg.MessageId)
 	close(instantChannel)
 
-	return recvMsg
+	return recvMsg.Payload
 }
 
 func (mq *MqService) reply(exchange string, origMsg Message, payload interface{}) {
