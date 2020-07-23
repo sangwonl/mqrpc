@@ -25,14 +25,14 @@ type Message struct {
 	Payload []byte `mapstructure:"Body"`
 }
 
-type MessageService interface {
-	Identifier() string
-	AllParticipants() []string
+// type MessageService interface {
+// 	Identifier() string
+// 	AllParticipants() []string
 
-	Send(to string, msgType string, payload interface{})
-	Broadcast(msgType string, payload interface{})
-	Request(to string, msgType string, payload interface{}) interface{}
-}
+// 	Send(to string, msgType string, payload interface{})
+// 	Broadcast(msgType string, payload interface{})
+// 	Request(to string, msgType string, payload interface{}) interface{}
+// }
 
 type DefaultMessageServiceImpl struct {
 	MqService *MqService
@@ -82,8 +82,8 @@ type MqService struct {
 	exchangeP2P       string
 	exchangeBroadcast string
 
+	recvMsgChannelsRpc sync.Map
 	recvMsgChannel     chan Message
-	recvMsgChannelsRpc map[string]chan Message
 
 	handlers     []MessageHandler
 	handlerFuncs map[string]HandlerFunc
@@ -141,10 +141,9 @@ func (mq *MqService) consumerP2PQueue() {
 			mapstructure.Decode(m, &recv)
 
 			if recv.Type == MSG_TYPE_RESERVED_REPLY {
-				if _, ok := mq.recvMsgChannelsRpc[recv.MessageId]; !ok {
-					panic("p2p channel must be created at sending.")
+				if ch, ok := mq.recvMsgChannelsRpc.Load(recv.MessageId); ok {
+					ch.(chan Message) <- recv
 				}
-				mq.recvMsgChannelsRpc[m.MessageId] <- recv
 			} else {
 				mq.recvMsgChannel <- recv
 			}
@@ -229,7 +228,7 @@ func (mq *MqService) sendAndWaitReply(routingKey string, msgType string, payload
 	msg := composeMessage("", msgType, mq.peerName, payload)
 
 	instantChannel := make(chan Message)
-	mq.recvMsgChannelsRpc[msg.MessageId] = instantChannel
+	mq.recvMsgChannelsRpc.Store(msg.MessageId, instantChannel)
 
 	mq.channel.Publish(
 		mq.exchangeP2P,
@@ -240,7 +239,7 @@ func (mq *MqService) sendAndWaitReply(routingKey string, msgType string, payload
 	)
 
 	recvMsg := receiveMessageWithTimeout(instantChannel, 5)
-	delete(mq.recvMsgChannelsRpc, msg.MessageId)
+	mq.recvMsgChannelsRpc.Delete(msg.MessageId)
 	close(instantChannel)
 
 	var value map[string]interface{}
@@ -284,8 +283,8 @@ func NewMqService(amqpUri, namespace string) *MqService {
 	return &MqService{
 		namespace:          namespace,
 		channel:            ch,
+		recvMsgChannelsRpc: sync.Map{},
 		recvMsgChannel:     make(chan Message, 1024),
-		recvMsgChannelsRpc: make(map[string]chan Message),
 		handlerFuncs:       make(map[string]HandlerFunc),
 	}
 }
