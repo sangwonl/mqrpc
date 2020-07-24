@@ -96,14 +96,15 @@ func (mq *MqService) Run(peerName string) {
 	}
 	mq.peerName = peerName // routing key
 
-	// generate exchange name
-	mq.exchangeP2P = fmt.Sprintf("mqrpc.%s.p2p", mq.namespace)
-	mq.exchangeBroadcast = fmt.Sprintf("mqrpc.%s.broadcast", mq.namespace)
+	// declare exchange, it will create only if it doesn't exist
+	mq.exchangeP2P = mq.ensureExchange(
+		fmt.Sprintf("mqrpc.%s.p2p", mq.namespace), "direct")
+	mq.exchangeBroadcast = mq.ensureExchange(
+		fmt.Sprintf("mqrpc.%s.broadcast", mq.namespace), "fanout")
 
 	// declare queue, it will create queue only if it doesn't exist
 	mq.queueP2P = mq.enusureQueue(
 		fmt.Sprintf("mqrpc.%s.q-p2p-%s", mq.namespace, mq.peerName))
-
 	mq.queueBroadcast = mq.enusureQueue(
 		fmt.Sprintf("mqrpc.%s.q-broadcast-%s", mq.namespace, mq.peerName))
 
@@ -183,6 +184,23 @@ func (mq *MqService) messageHandler() {
 			}
 		}
 	}()
+}
+
+func (mq *MqService) ensureExchange(name, excType string) string {
+	err := mq.channel.ExchangeDeclare(
+		name,    // name
+		excType, // type
+		false,   // durable
+		false,   // auto-deleted
+		false,   // internal
+		false,   // no-wait
+		nil,     // arguments
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	return name
 }
 
 func (mq *MqService) enusureQueue(name string) *amqp.Queue {
