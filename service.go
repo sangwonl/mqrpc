@@ -2,6 +2,7 @@ package mqrpc
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -42,19 +43,19 @@ func (m *DefaultMessageServiceImpl) Identifier() string {
 	return m.MqService.peerName
 }
 
-func (m *DefaultMessageServiceImpl) AllParticipants() []string {
-	return nil
+func (m *DefaultMessageServiceImpl) Send(to, msgType string, payload interface{}) error {
+	return m.MqService.fireAndForget(to, msgType, payload, false)
 }
 
-func (m *DefaultMessageServiceImpl) Send(to, msgType string, payload interface{}) {
-	m.MqService.fireAndForget(to, msgType, payload)
+func (m *DefaultMessageServiceImpl) SendToAny(msgType string, payload interface{}) error {
+	return m.MqService.fireAndForget("", msgType, payload, false)
 }
 
-func (m *DefaultMessageServiceImpl) Broadcast(msgType string, payload interface{}) {
-	m.MqService.fireAndForget("", msgType, payload)
+func (m *DefaultMessageServiceImpl) Broadcast(msgType string, payload interface{}) error {
+	return m.MqService.fireAndForget("", msgType, payload, true)
 }
 
-func (m *DefaultMessageServiceImpl) Request(to, msgType string, payload interface{}) interface{} {
+func (m *DefaultMessageServiceImpl) Request(to, msgType string, payload interface{}) (interface{}, error) {
 	return m.MqService.sendAndWaitReply(to, msgType, payload)
 }
 
@@ -79,6 +80,7 @@ type MqService struct {
 	channel           *amqp.Channel
 	queueP2P          *amqp.Queue
 	queueBroadcast    *amqp.Queue
+	queueWorker       *amqp.Queue
 	exchangeP2P       string
 	exchangeBroadcast string
 
@@ -89,7 +91,7 @@ type MqService struct {
 	handlerFuncs map[string]HandlerFunc
 }
 
-func (mq *MqService) Run(peerName string) {
+func (mq *MqService) Run(peerName string) error {
 	// generate unique peer name
 	if peerName == "" {
 		peerName = ksuid.New().String()
@@ -104,9 +106,11 @@ func (mq *MqService) Run(peerName string) {
 
 	// declare queue, it will create queue only if it doesn't exist
 	mq.queueP2P = mq.enusureQueue(
-		fmt.Sprintf("mqrpc.%s.q-p2p-%s", mq.namespace, mq.peerName))
+		fmt.Sprintf("mqrpc.%s.q-p2p-%s", mq.namespace, mq.peerName), true)
 	mq.queueBroadcast = mq.enusureQueue(
-		fmt.Sprintf("mqrpc.%s.q-broadcast-%s", mq.namespace, mq.peerName))
+		fmt.Sprintf("mqrpc.%s.q-broadcast-%s", mq.namespace, mq.peerName), true)
+	mq.queueWorker = mq.enusureQueue(
+		fmt.Sprintf("mqrpc.%s.q-worker-%s", mq.namespace, mq.peerName), false)
 
 	// bind the queue with p2p exchange and broadcast one respectively
 	mq.bindQueue(mq.queueP2P, mq.exchangeP2P, mq.peerName)
@@ -115,6 +119,7 @@ func (mq *MqService) Run(peerName string) {
 	// start consuming
 	go mq.consumerP2PQueue()
 	go mq.consumerBroadcastQueue()
+	go mq.consumerWorkerQueue()
 
 	// message handler
 	go mq.messageHandler()
@@ -123,54 +128,69 @@ func (mq *MqService) Run(peerName string) {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	wg.Wait()
+
+	return nil
 }
 
 func (mq *MqService) consumerP2PQueue() {
-	for {
-		msgs, _ := mq.channel.Consume(
-			mq.queueP2P.Name, // queue
-			"",               // consumer
-			true,             // auto-ack
-			false,            // exclusive
-			false,            // no-local
-			false,            // no-wait
-			nil,              // args
-		)
+	msgs, _ := mq.channel.Consume(
+		mq.queueP2P.Name, // queue
+		"",               // consumer
+		true,             // auto-ack
+		false,            // exclusive
+		false,            // no-local
+		false,            // no-wait
+		nil,              // args
+	)
 
-		for m := range msgs {
-			var recv Message
-			mapstructure.Decode(m, &recv)
+	for m := range msgs {
+		var recv Message
+		mapstructure.Decode(m, &recv)
 
-			if recv.Type == MSG_TYPE_RESERVED_REPLY {
-				if ch, ok := mq.recvMsgChannelsRpc.Load(recv.MessageId); ok {
-					ch.(chan Message) <- recv
-				}
-			} else {
-				mq.recvMsgChannel <- recv
+		if recv.Type == MSG_TYPE_RESERVED_REPLY {
+			if ch, ok := mq.recvMsgChannelsRpc.Load(recv.MessageId); ok {
+				ch.(chan Message) <- recv
 			}
+		} else {
+			mq.recvMsgChannel <- recv
 		}
 	}
 }
 
 func (mq *MqService) consumerBroadcastQueue() {
-	for {
-		msgs, _ := mq.channel.Consume(
-			mq.queueBroadcast.Name, // queue
-			"",                     // consumer
-			true,                   // auto-ack
-			false,                  // exclusive
-			false,                  // no-local
-			false,                  // no-wait
-			nil,                    // args
-		)
+	msgs, _ := mq.channel.Consume(
+		mq.queueBroadcast.Name, // queue
+		"",                     // consumer
+		true,                   // auto-ack
+		false,                  // exclusive
+		false,                  // no-local
+		false,                  // no-wait
+		nil,                    // args
+	)
 
-		for m := range msgs {
-			var recvMsg Message
-			mapstructure.Decode(m, &recvMsg)
-			mq.recvMsgChannel <- recvMsg
-		}
+	for m := range msgs {
+		var recvMsg Message
+		mapstructure.Decode(m, &recvMsg)
+		mq.recvMsgChannel <- recvMsg
 	}
+}
 
+func (mq *MqService) consumerWorkerQueue() {
+	msgs, _ := mq.channel.Consume(
+		mq.queueWorker.Name, // queue
+		"",                  // consumer
+		true,                // auto-ack
+		false,               // exclusive
+		false,               // no-local
+		false,               // no-wait
+		nil,                 // args
+	)
+
+	for m := range msgs {
+		var recvMsg Message
+		mapstructure.Decode(m, &recvMsg)
+		mq.recvMsgChannel <- recvMsg
+	}
 }
 
 func (mq *MqService) messageHandler() {
@@ -203,14 +223,14 @@ func (mq *MqService) ensureExchange(name, excType string) string {
 	return name
 }
 
-func (mq *MqService) enusureQueue(name string) *amqp.Queue {
+func (mq *MqService) enusureQueue(name string, exclusive bool) *amqp.Queue {
 	q, err := mq.channel.QueueDeclare(
-		name,  // name
-		false, // durable
-		false, // delete when unused
-		true,  // exclusive
-		false, // no-wait
-		nil,   // arguments
+		name,      // name
+		false,     // durable
+		false,     // delete when unused
+		exclusive, // exclusive
+		false,     // no-wait
+		nil,       // arguments
 	)
 	if err != nil {
 		panic(err)
@@ -225,12 +245,18 @@ func (mq *MqService) bindQueue(q *amqp.Queue, exchange string, routingKey string
 	}
 }
 
-func (mq *MqService) fireAndForget(routingKey string, msgType string, payload interface{}) {
+func (mq *MqService) fireAndForget(routingKey string, msgType string, payload interface{}, broadcast bool) error {
 	var exchange string
-	if routingKey != "" {
-		exchange = mq.exchangeP2P
-	} else {
+
+	if broadcast {
 		exchange = mq.exchangeBroadcast
+		routingKey = ""
+	} else {
+		if routingKey != "" {
+			exchange = mq.exchangeP2P
+		} else {
+			exchange = mq.queueWorker.Name
+		}
 	}
 
 	mq.channel.Publish(
@@ -240,9 +266,11 @@ func (mq *MqService) fireAndForget(routingKey string, msgType string, payload in
 		false, // immediate
 		composeMessage("", msgType, "", payload),
 	)
+
+	return nil
 }
 
-func (mq *MqService) sendAndWaitReply(routingKey string, msgType string, payload interface{}) interface{} {
+func (mq *MqService) sendAndWaitReply(routingKey string, msgType string, payload interface{}) (interface{}, error) {
 	msg := composeMessage("", msgType, mq.peerName, payload)
 
 	instantChannel := make(chan Message)
@@ -262,7 +290,8 @@ func (mq *MqService) sendAndWaitReply(routingKey string, msgType string, payload
 
 	var value map[string]interface{}
 	json.Unmarshal(recvMsg.Payload, &value)
-	return value
+
+	return value, nil
 }
 
 func (mq *MqService) reply(exchange string, origMsg Message, payload interface{}) {
@@ -275,27 +304,29 @@ func (mq *MqService) reply(exchange string, origMsg Message, payload interface{}
 	)
 }
 
-func (mq *MqService) AddHandler(handler MessageHandler) {
+func (mq *MqService) AddHandler(handler MessageHandler) error {
 	mq.handlers = append(mq.handlers, handler)
 
 	for _, r := range handler.Routes() {
 		if _, ok := mq.handlerFuncs[r.MsgType]; ok {
-			panic(fmt.Sprintf("handler for %s already exists.", r.MsgType))
+			return errors.New(fmt.Sprintf("handler for %s already exists.", r.MsgType))
 		}
 
 		mq.handlerFuncs[r.MsgType] = r.Handler
 	}
+
+	return nil
 }
 
-func NewMqService(amqpUri, namespace string) *MqService {
+func NewMqService(amqpUri, namespace string) (*MqService, error) {
 	conn, err := amqp.Dial(amqpUri)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	ch, err := conn.Channel()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	return &MqService{
@@ -304,5 +335,5 @@ func NewMqService(amqpUri, namespace string) *MqService {
 		recvMsgChannelsRpc: sync.Map{},
 		recvMsgChannel:     make(chan Message, 1024),
 		handlerFuncs:       make(map[string]HandlerFunc),
-	}
+	}, nil
 }
