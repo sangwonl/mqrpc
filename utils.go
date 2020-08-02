@@ -31,12 +31,11 @@ func composeMessage(msgId, msgType, replyTo string, payload interface{}) amqp.Pu
 	return msg
 }
 
-func receiveMessageWithTimeout(ch chan Message, timeoutInSecs time.Duration) Message {
+func receiveMessageWithTimeout(ch chan Message, timeout time.Duration) Message {
 	var recvMsg Message
 	select {
 	case recvMsg = <-ch:
-	case <-time.After(timeoutInSecs * time.Second):
+	case <-time.After(timeout):
 	}
-
 	return recvMsg
 }
