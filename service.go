@@ -55,8 +55,8 @@ func (m *DefaultMessageServiceImpl) Broadcast(msgType string, payload interface{
 	return m.MqService.fireAndForget("", msgType, payload, true)
 }
 
-func (m *DefaultMessageServiceImpl) Request(to, msgType string, payload interface{}) (interface{}, error) {
-	return m.MqService.sendAndWaitReply(to, msgType, payload)
+func (m *DefaultMessageServiceImpl) Request(to, msgType string, payload interface{}, timeout time.Duration) (interface{}, error) {
+	return m.MqService.sendAndWaitReply(to, msgType, payload, timeout)
 }
 
 type Context struct {
@@ -270,7 +270,7 @@ func (mq *MqService) fireAndForget(routingKey string, msgType string, payload in
 	return nil
 }
 
-func (mq *MqService) sendAndWaitReply(routingKey string, msgType string, payload interface{}) (interface{}, error) {
+func (mq *MqService) sendAndWaitReply(routingKey string, msgType string, payload interface{}, timeout time.Duration) (interface{}, error) {
 	msg := composeMessage("", msgType, mq.peerName, payload)
 
 	instantChannel := make(chan Message)
@@ -284,7 +284,7 @@ func (mq *MqService) sendAndWaitReply(routingKey string, msgType string, payload
 		msg,
 	)
 
-	recvMsg := receiveMessageWithTimeout(instantChannel, 5)
+	recvMsg := receiveMessageWithTimeout(instantChannel, timeout)
 	mq.recvMsgChannelsRpc.Delete(msg.MessageId)
 	close(instantChannel)
 
