@@ -32,16 +32,10 @@ func composeMessage(msgId, msgType, replyTo string, payload interface{}) amqp.Pu
 }
 
 func receiveMessageWithTimeout(ch chan Message, timeoutInSecs time.Duration) Message {
-	timeout := make(chan bool, 1)
-	go func() {
-		time.Sleep(timeoutInSecs * time.Second)
-		timeout <- true
-	}()
-
 	var recvMsg Message
 	select {
 	case recvMsg = <-ch:
-	case <-timeout:
+	case <-time.After(timeoutInSecs * time.Second):
 	}
 
 	return recvMsg
