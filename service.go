@@ -110,7 +110,7 @@ func (mq *MqService) Run(peerName string) error {
 	mq.queueBroadcast = mq.enusureQueue(
 		fmt.Sprintf("mqrpc.%s.q-broadcast-%s", mq.namespace, mq.peerName), true)
 	mq.queueWorker = mq.enusureQueue(
-		fmt.Sprintf("mqrpc.%s.q-worker-%s", mq.namespace, mq.peerName), false)
+		fmt.Sprintf("mqrpc.%s.q-worker", mq.namespace), false)
 
 	// bind the queue with p2p exchange and broadcast one respectively
 	mq.bindQueue(mq.queueP2P, mq.exchangeP2P, mq.peerName)
