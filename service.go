@@ -255,7 +255,8 @@ func (mq *MqService) fireAndForget(routingKey string, msgType string, payload in
 		if routingKey != "" {
 			exchange = mq.exchangeP2P
 		} else {
-			exchange = mq.queueWorker.Name
+			exchange = ""
+			routingKey = mq.queueWorker.Name
 		}
 	}
 
