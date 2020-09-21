@@ -91,7 +91,7 @@ type MqService struct {
 	handlerFuncs map[string]HandlerFunc
 }
 
-func (mq *MqService) Run(peerName string) error {
+func (mq *MqService) Run(peerName string, enableWorker bool) error {
 	// generate unique peer name
 	if peerName == "" {
 		peerName = ksuid.New().String()
@@ -119,7 +119,10 @@ func (mq *MqService) Run(peerName string) error {
 	// start consuming
 	go mq.consumerP2PQueue()
 	go mq.consumerBroadcastQueue()
-	go mq.consumerWorkerQueue()
+
+	if enableWorker {
+		go mq.consumerWorkerQueue()
+	}
 
 	// message handler
 	go mq.messageHandler()
