@@ -260,15 +260,13 @@ func (mq *MqService) fireAndForget(routingKey string, msgType string, payload in
 		}
 	}
 
-	mq.channel.Publish(
+	return mq.channel.Publish(
 		exchange,
 		routingKey,
 		false, // mandatory
 		false, // immediate
 		composeMessage("", msgType, "", payload),
 	)
-
-	return nil
 }
 
 func (mq *MqService) sendAndWaitReply(routingKey string, msgType string, payload interface{}, timeout time.Duration) (interface{}, error) {
@@ -277,13 +275,17 @@ func (mq *MqService) sendAndWaitReply(routingKey string, msgType string, payload
 	instantChannel := make(chan Message)
 	mq.recvMsgChannelsRpc.Store(msg.MessageId, instantChannel)
 
-	mq.channel.Publish(
+	err := mq.channel.Publish(
 		mq.exchangeP2P,
 		routingKey,
 		false, // mandatory
 		false, // immediate
 		msg,
 	)
+
+	if err != nil {
+		return nil, err
+	}
 
 	recvMsg := receiveMessageWithTimeout(instantChannel, timeout)
 	mq.recvMsgChannelsRpc.Delete(msg.MessageId)
