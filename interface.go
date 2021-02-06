@@ -4,10 +4,10 @@ import "time"
 
 // type MessageService interface {
 // Identifier() string
-// Send(to string, msgType MsgType, payload interface{}) error
-// SendToAny(msgType MsgType, payload interface{}) error
-// Broadcast(msgType MsgType, payload interface{}) error
-// Request(to string, msgType MsgType, payload interface{}, timeout time.Duration) (interface{}, error)
+// Send(to, msgType string, payload interface{}) error
+// SendToAny(msgType string, payload interface{}) error
+// Broadcast(msgType string, payload interface{}) error
+// Request(to, msgType string, payload interface{}, timeout time.Duration) (interface{}, error)
 // }
 
 type DefaultMessageService struct {
@@ -18,18 +18,18 @@ func (m *DefaultMessageService) Identifier() string {
 	return m.MqService.peerName
 }
 
-func (m *DefaultMessageService) Send(to string, msgType MsgType, payload interface{}) error {
-	return m.MqService.fireAndForget(to, msgType, payload, false)
+func (m *DefaultMessageService) Send(to, msgType string, payload interface{}) error {
+	return m.MqService.fireAndForget(to, MsgType(msgType), payload, false)
 }
 
-func (m *DefaultMessageService) SendToAny(msgType MsgType, payload interface{}) error {
-	return m.MqService.fireAndForget("", msgType, payload, false)
+func (m *DefaultMessageService) SendToAny(msgType string, payload interface{}) error {
+	return m.MqService.fireAndForget("", MsgType(msgType), payload, false)
 }
 
-func (m *DefaultMessageService) Broadcast(msgType MsgType, payload interface{}) error {
-	return m.MqService.fireAndForget("", msgType, payload, true)
+func (m *DefaultMessageService) Broadcast(msgType string, payload interface{}) error {
+	return m.MqService.fireAndForget("", MsgType(msgType), payload, true)
 }
 
-func (m *DefaultMessageService) Request(to string, msgType MsgType, payload interface{}, timeout time.Duration) (interface{}, error) {
-	return m.MqService.sendAndWaitReply(to, msgType, payload, timeout)
+func (m *DefaultMessageService) Request(to, msgType string, payload interface{}, timeout time.Duration) (interface{}, error) {
+	return m.MqService.sendAndWaitReply(to, MsgType(msgType), payload, timeout)
 }
