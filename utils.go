@@ -8,11 +8,11 @@ import (
 	"github.com/streadway/amqp"
 )
 
-func composeMessage(msgId, msgType, replyTo string, payload interface{}) amqp.Publishing {
+func composeMessage(msgType MsgType, msgId, replyTo string, payload interface{}) amqp.Publishing {
 	if msgId == "" {
 		msgId = uuid.NewV4().String()
 	} else { // assume it's for reply
-		msgType = MSG_TYPE_RESERVED_REPLY
+		msgType = MsgTypeReservedReply
 	}
 
 	body, _ := json.Marshal(payload)
@@ -20,7 +20,7 @@ func composeMessage(msgId, msgType, replyTo string, payload interface{}) amqp.Pu
 	msg := amqp.Publishing{
 		MessageId:   msgId,
 		ContentType: "application/json",
-		Type:        msgType,
+		Type:        string(msgType),
 		Body:        body,
 	}
 
@@ -32,6 +32,11 @@ func composeMessage(msgId, msgType, replyTo string, payload interface{}) amqp.Pu
 }
 
 func receiveMessageWithTimeout(ch chan Message, timeout time.Duration) Message {
+	const DefaultTimeout = 15 * time.Second
+	if timeout == 0 {
+		timeout = DefaultTimeout
+	}
+
 	var recvMsg Message
 	select {
 	case recvMsg = <-ch:
