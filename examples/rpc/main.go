@@ -41,9 +41,10 @@ func main() {
 
 				cliPing := pingData{Peer: peerName, Ts: time.Now().Unix()}
 				resp, _ := msgClient.Request("server", "ping", &cliPing, 0)
+				msg, _ := resp.(*mqrpc.Message)
 
 				var srvPing pingData
-				json.Unmarshal(resp.Payload, &srvPing)
+				json.Unmarshal(msg.Payload, &srvPing)
 
 				fmt.Printf("Received ping from %s: %d\n", srvPing.Peer, srvPing.Ts)
 			}

@@ -7,7 +7,7 @@ import "time"
 // Send(to string, msgType MsgType, payload interface{}) error
 // SendToAny(msgType MsgType, payload interface{}) error
 // Broadcast(msgType MsgType, payload interface{}) error
-// Request(to string, msgType MsgType, payload interface{}, timeout time.Duration) (*Message, error)
+// Request(to string, msgType MsgType, payload interface{}, timeout time.Duration) (interface{}, error)
 // }
 
 type DefaultMessageService struct {
@@ -30,6 +30,6 @@ func (m *DefaultMessageService) Broadcast(msgType MsgType, payload interface{}) 
 	return m.MqService.fireAndForget("", msgType, payload, true)
 }
 
-func (m *DefaultMessageService) Request(to string, msgType MsgType, payload interface{}, timeout time.Duration) (*Message, error) {
+func (m *DefaultMessageService) Request(to string, msgType MsgType, payload interface{}, timeout time.Duration) (interface{}, error) {
 	return m.MqService.sendAndWaitReply(to, msgType, payload, timeout)
 }
