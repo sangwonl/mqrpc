@@ -23,7 +23,7 @@ const PeerName = "myPeerName"
 
 svc, err := mqrpc.NewMqService(AmqpURI, Namespace, PeerName)
 if err != nil {
-	panic(err)
+    panic(err)
 }
 ```
 
