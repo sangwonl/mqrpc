@@ -31,5 +31,9 @@ func (m *DefaultMessageService) Broadcast(msgType string, payload interface{}) e
 }
 
 func (m *DefaultMessageService) Request(to, msgType string, payload interface{}, timeout time.Duration) (interface{}, error) {
-	return m.MqService.sendAndWaitReply(to, MsgType(msgType), payload, timeout)
+	msg, err := m.MqService.sendAndWaitReply(to, MsgType(msgType), payload, timeout)
+	if err != nil {
+		return nil, err
+	}
+	return msg.Payload, nil
 }
